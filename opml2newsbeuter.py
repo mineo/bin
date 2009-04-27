@@ -29,7 +29,7 @@ except:
 
 outlines = opml.getElementsByTagName('outline')
 dict ={}
-tag = "newtag"
+tag = ""
 for line in outlines:
 	try:
 		url = line.attributes["xmlUrl"].value
