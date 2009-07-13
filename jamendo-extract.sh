@@ -6,10 +6,15 @@
 # the zip-file as they have no
 # internale folder structure
 # ------------------------------
-clear
-newdir=`echo $1 | sed 's/.zip//'`
-mkdir "$newdir"
-mv "$1" "$newdir"
-cd "$newdir"
-7z x "$1"
-rm "$1"
+
+musicdir=~/Musik/
+for i in "$*"; do
+	newdir=`echo $i | sed 's/.zip//'`
+	mkdir "$newdir"
+	mv "$i" "$newdir"
+	cd "$newdir"
+	7z x "$i"
+	rm "$i"
+	cd ..
+	mv "$newdir" $musicdir
+done
