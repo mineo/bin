@@ -1,0 +1,304 @@
+#!/usr/bin/python
+#
+# aac2ogg - An aac to ogg vorbis converter
+# Copyleft (C) Ken Southerland 2006
+#
+# Based on the aac2ogg perl script Copyright (C) Eskild Hustvedt 2006
+#
+# I don't know perl and didn't want to learn just to extend the
+# script to what I needed it to do.  So I rewrote the original
+# in python and then modified it.  My modifications included...
+#
+# --Recursively operating on aac files in a directory structure
+#   automatically.
+# --Removing the original aac automatically based upon successful
+#   conversion.
+# --Determining the bitrate from the original aac file and using
+#   that to determine what the quality of the resulting ogg file
+#   should be rather than assuming a set quality for all files.
+# --Renaming the file based on the tags so as to standardize
+#   the file naming conventions for all files.
+#
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+#
+import os
+import sys
+
+def getFiles( inputdir, recursive = 0, files = [] ):
+    if not os.path.isdir( inputdir ):
+        if inputdir.endswith( '.m4a' ):
+            files.append( inputdir )
+            return files
+        
+    someFiles = os.listdir( inputdir )
+    someFiles.sort()
+    
+    for afile in someFiles:
+        filename = os.path.join( inputdir, afile )
+        
+        if os.path.isdir( filename ):
+            if recursive:
+                files = getFiles( filename, recursive, files )
+        else:
+            if filename.endswith( '.m4a' ):
+                files.append( filename )
+    
+    return files
+
+#
+# ----- MAIN -----
+#
+def main():
+    tmpfile = "convert_temp.wav"
+        
+    inputdir = sys.argv[1]
+
+    if inputdir == "--help":
+        print """aac2ogg <filename|directory>
+        * If a filename is specified it must end in the extension .m4a
+        * If a directory is specified the script will run through the
+        given directory and then recursively through subdirectories
+        converting any file with an .m4a extension to the ogg format.
+        * If the bitrate of the original file cannot be determined then
+        a default quality of 6 is used, otherwise a quality commensurate
+        with the bitrate is automatically chosen.
+        
+        CAUTION:   Upon successful conversion, this script will automatically
+        delete the original aac file!"""
+
+        sys.exit()
+        
+    files = []
+    getFiles( inputdir, 1, files )    
+    
+    for filename in files:
+        print filename
+
+        #
+        #    We read the length of the file and the tags (artist,
+        #    title, etc.) using a program called faad.
+        #
+        #    We need to put double quotes around the filename
+        #    or else any embedded apostrophes in the filename
+        #    cause problems.
+        #
+        faad = os.popen( "faad -i \"%s\" 2>&1" % filename )
+
+        #
+        #    Length of track in seconds
+        #
+        length = 0
+
+        tags={}
+        for line in faad.readlines():
+            #if line.startswith( "Unable to find correct AAC sound track in the MP4 file." ):
+            #    break
+            
+            colonIndex = line.find( ":" )
+            
+            if line.startswith( "LC AAC" ):
+                index = line.find( 'secs' );
+                if index > -1:
+                    length = line[6:index-1].strip()
+            elif colonIndex >= 0:
+                tag = line.split( ":", 1 )
+                tags[tag[0].strip()] = tag[1].strip()
+
+        if length == 0:
+            #
+            #    Don't convert and leave the file intact.
+            #
+            #print "ERROR:  Bitrate could not be determined."
+            #continue
+            quality = 6
+            print "WARNING:  File info/tags could not be read.  Defaulting to quality %s." % quality
+        
+        else:
+            #
+            #    Find the bitrate of the file and determine what
+            #    quality to use for ogg encoding.  No reason to
+            #    encode at a higher quality than we started with.
+            #
+            #    This is based on the following table found in wikipedia
+            #    for rough bitrates for ogg vorbis files.  Not dealing
+            #    with bitrates below 128 or above 224 as they shouldn't
+            #    exist in all likelihood.  If they are below then we will
+            #    encode them higher than we need to and if they are above
+            #    then we will encode them lower than the original but still
+            #    good quality.
+            #        -q4    128 kb/s 	
+            #        -q5    160 kb/s 	
+            #        -q6    192 kb/s 	
+            #        -q7    224 kb/s
+            #
+            size = os.stat(filename).st_size
+            
+            #
+            #    size/length gives bytes/sec.  Multiply by 8
+            #    and divide by 1024 to get kbits/sec.
+            #
+            bitrate = ( ( size / float(length) ) * 8. ) / 1024.
+            
+            #
+            #    Allow for some round-off error and the calculations
+            #    are approximate anyway.
+            #
+            if bitrate < 130:
+                quality = 4
+            elif bitrate <= 162:
+                quality = 5
+            elif bitrate <= 194:
+                quality = 6
+            else:
+                quality = 7
+        
+            
+        cmd = "oggenc -Q -q %s %s" % ( quality, tmpfile )
+
+
+        #
+        #    If we have the tags track, artist, and title then
+        #    let's create a filename from that, otherwise just
+        #    let oggenc change the file extension.
+        #
+        if ( tags.has_key('track')
+             and tags.has_key('artist')
+             and tags.has_key('title') ):
+
+            if int(tags['track']) < 10:
+                outfile = "0" + tags['track']
+            else:
+                outfile = tags['track']
+            
+            outfile += '-' + tags['artist'] + '_-_' + tags['title'] + '.ogg'
+            outfile = outfile.replace( " ", "_" ).replace( "'", "" ).replace( "\"", "" ).replace( "?", "" )
+
+            outfile = os.path.join( os.path.dirname( filename ), outfile )
+        else:
+            #
+            #    Just use the same filename but replace the m4a with ogg of course.
+            #
+            outfile = filename.replace( ".m4a", ".ogg" )
+            
+            #
+            #    If some of the key tags are missing let's see
+            #    if we can create them from the file structure
+            #    and/or filename.
+            #    This works under the assumption that the files
+            #    are stored in the format.  <artist>/<album>/<tracknum>[-|_]<title>
+            #    which seems to be the most common.
+            #
+            bits = os.path.split( filename )
+
+            #
+            #    Extract track number.
+            #
+            try:
+                num = int(bits[1][0:2])
+                if not tags.has_key( 'track' ):
+                    tags['track']=num
+                title=bits[1][2:]
+            except ValueError:
+                title=bits[1]
+
+            
+            if not tags.has_key('title'):
+                #
+                #    Now strip strip off leading junk
+                #    and file extension to get title.
+                #
+                if title.startswith( '-' ) or title.startswith( '_' ):
+                    title = title[1:]
+                    
+                extindex = title.rfind( '.' )
+                if extindex > 0:
+                    title = title[0:extindex]
+
+                tags['title']=title.replace( '_', ' ' )
+                
+                        
+            #
+            #    Now get album.
+            #
+            bits = os.path.split( bits[0] )
+            
+            if bits[1] == '':
+                album = 'Unknown'
+            else:
+                album = bits[1].replace( '_', ' ' )
+                
+            if not tags.has_key('album'):
+                tags['album']=album
+                
+            #
+            #    Now get artist
+            #
+            bits = os.path.split( bits[0] )
+            
+            if bits[1] == '':
+                artist = 'Unknown'
+            else:
+                artist = bits[1].replace( '_', ' ' )
+
+            if not tags.has_key('artist'):
+                tags['artist']=artist
+
+        #
+        #    Add track number to command
+        #
+        if tags.has_key( 'track' ):
+            cmd += " --tracknum %s" % ( tags['track'] )
+        
+        #
+        #    Now add other tags.
+        #
+        tagkeys = ( 'title', 'artist', 'album', 'date', 'genre' )
+
+        for key in tagkeys:
+            if tags.has_key( key ):
+                cmd += " --%s \"%s\"" % ( key, tags[key] )
+
+        cmd += " -o \"%s\"" % outfile
+
+        #print cmd
+        #sys.exit()
+        
+        #
+        #    Now do the conversion in two steps.
+        #
+        result = os.system( "mplayer -ao pcm:file=\"%s\" \"%s\" &>/dev/null" % ( tmpfile, filename ) )
+
+        if result > 0:
+            print "ERROR:  Trouble creating temporary wave file using mplayer."
+            continue
+        
+        result = os.system( cmd )
+
+        #
+        #    On success delete the original
+        #
+        if result == 0:
+            os.remove( filename );
+
+
+    if os.path.isfile( tmpfile ):
+        os.remove( tmpfile );
+
+    sys.exit()
+    
+
+if __name__ == "__main__":
+    main()
