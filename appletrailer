@@ -11,7 +11,7 @@ if [ $? -eq 0 ]; then
         notify-send "Download complete" "$filename has been downloaded"
         choice=$(zenity --question --title="Download complete" --text="Play $filename ?")
         if [ $? -eq 0 ]; then
-            mplayer $DIR/$filename
+            mplayer $DIR/$filename &
         fi
     else
         notify-send "Download failed" "$filename could not be downloaded"
