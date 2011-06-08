@@ -1,0 +1,132 @@
+#!/usr/bin/env python2
+"""Submits ISRCs to MusicBrainz
+
+heavily inspired by http://kraehen.org/isrcsubmit.py
+"""
+import getpass
+import argparse
+import subprocess
+
+from musicbrainz2.disc import readDisc, DiscError, getSubmissionUrl
+from musicbrainz2.webservice import WebService, Query, ReleaseFilter
+from musicbrainz2.webservice import WebServiceError, ReleaseIncludes
+from datetime import datetime
+from os import remove
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-u", "--user", type=str, help="Username")
+    parser.add_argument("-p", "--password", type=str, help="Password")
+    parser.add_argument("-d", "--device", type=str, default="/dev/sr0",
+            help="Device name (default is /dev/sr0)")
+    parser.add_argument("-o", "--offset", type=int, default=0,
+            help=
+"""Offset to add to every track number
+This is useful for releases with multi-disc releases.
+Currently you'll only get one big release from the webservice.
+Example:
+    CD1: 25 tracks
+    CD2: 26 tracks
+If you want to submit ISRCs for CD2, you'll have to specify an offset of 25""")
+    args = parser.parse_args()
+
+    if not args.user:
+        exit("No username given")
+
+    if not args.password:
+        password = getpass.getpass()
+    else:
+        password = args.password
+
+    try:
+        disc = readDisc(args.device)
+    except DiscError, e:
+        exit("DiscID calculation failed: %s" % e)
+
+    ws = WebService(username=args.user, password=password)
+    q = Query(ws)
+
+    filter = ReleaseFilter(discId=disc.id)
+
+    try:
+        results = q.getReleases(filter=filter)
+    except WebServiceError, e:
+        exit("An error occured while communicating with MusicBrainz: %s" % e)
+
+    if len(results) == 0:
+        print "The disc is not in the database"
+        print "Please submit it with: %s" % getSubmissionUrl(disc)
+        exit(1)
+    elif len(results) > 1:
+        print "This Disc ID is ambiguous:"
+        for i in range(len(results)):
+            release = results[i].release
+            print str(i)+":", release.getArtist().getName(),
+            print "-", release.getTitle(),
+            print "(" + release.getTypes()[1].rpartition('#')[2] + ")"
+        num = -1
+        while True:
+            try:
+                num =  raw_input("Which one do you want? [0-%d] " % i)
+                result = results[int(num)]
+            except IndexError:
+                continue
+            break
+    else:
+        result = results[0]
+
+    include = ReleaseIncludes(artist=True, tracks=True, isrcs=True)
+    try:
+        release = q.getReleaseById(result.getRelease().getId(), include=include)
+    except WebServiceError, e:
+        print "Couldn't fetch release:", str(e)
+        exit(1)
+    print 'Artist:\t\t', release.getArtist().getName()
+    print 'Release:\t', release.getTitle()
+    tracks = release.getTracks()
+
+    filename = "/tmp/cdrdao-%s.toc" % datetime.now()
+    try:
+        proc = subprocess.Popen(["cdrdao", "read-toc", "--device",
+                args.device, "-v", "0", filename], stderr=subprocess.PIPE,
+                stdout=subprocess.PIPE)
+        proc.wait()
+    except Exception, e:
+        exit("Exception while calling cdrdao: %s" % str(e))
+    if proc.returncode != 0:
+        exit("cdrdao returned with return code %i" % proc.returncode)
+
+    tracks2isrcs = dict()
+    tracknum = 0
+
+    with open(filename, "r") as tocfile:
+        for line in tocfile:
+            sline = line.split(" ")
+            if sline[0] == "//":
+                tracknum = int(sline[2]) - 1 + args.offset
+            elif sline[0] == "ISRC":
+                isrc = sline[1][1:-2]
+                if isrc not in (tracks[tracknum].getISRCs()):
+                    tracks2isrcs[tracks[tracknum].getId()] = isrc
+
+    if len(tracks2isrcs) == 0:
+        print "No new ISRCs could be found."
+    else:
+
+        for key, val in tracks2isrcs.items():
+            print "The ISRC %s will be attached to %s" % (val, key)
+
+        if raw_input("Is this correct? [y/N] ") == "y":
+            try:
+                q.submitISRCs(tracks2isrcs)
+                print "Successfully submitted", len(tracks2isrcs), "ISRCs."
+            except WebServiceError, e:
+                print "Couldn't send ISRCs:", str(e)
+        else:
+            print "Nothing was submitted to the server."
+    remove(filename)
+
+
+if __name__ == '__main__':
+    main()
