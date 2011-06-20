@@ -85,7 +85,7 @@ def main():
             try:
                 num =  raw_input("Which one do you want? [0-%d] " % i)
                 result = results[int(num)]
-            except IndexError:
+            except (IndexError, ValueError):
                 continue
             break
     else:
