@@ -7,7 +7,7 @@
 # internale folder structure
 # ------------------------------
 
-musicdir=/media/pinky/Musik
+musicdir=~/Musik
 for i in "$*"; do
 	newdir=`echo $i | sed 's/.zip//'`
 	mkdir "$newdir"
