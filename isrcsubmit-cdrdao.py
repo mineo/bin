@@ -4,7 +4,6 @@
 heavily inspired by http://kraehen.org/isrcsubmit.py
 """
 import getpass
-import argparse
 import subprocess
 
 from musicbrainz2.disc import readDisc, DiscError, getSubmissionUrl
@@ -12,25 +11,39 @@ from musicbrainz2.webservice import WebService, Query, ReleaseFilter
 from musicbrainz2.webservice import WebServiceError, ReleaseIncludes
 from datetime import datetime
 from os import remove
+from sys import version_info
 
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-u", "--user", type=str, help="Username")
-    parser.add_argument("-p", "--password", type=str, help="Password")
-    parser.add_argument("-d", "--device", type=str, default="/dev/sr0",
-            help="Device name (default is /dev/sr0)")
-    parser.add_argument("-o", "--offset", type=int, default=0,
-            help=
+_offset_help = \
 """Offset to add to every track number
 This is useful for releases with multi-disc releases.
 Currently you'll only get one big release from the webservice.
 Example:
     CD1: 25 tracks
     CD2: 26 tracks
-If you want to submit ISRCs for CD2, you'll have to specify an offset of 25""")
-    args = parser.parse_args()
+If you want to submit ISRCs for CD2, you'll have to specify an offset of 25"""
 
+def main():
+    if version_info >= (2,7):
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument("-u", "--user", type=str, help="Username")
+        parser.add_argument("-p", "--password", type=str, help="Password")
+        parser.add_argument("-d", "--device", type=str, default="/dev/sr0",
+                help="Device name (default is /dev/sr0)")
+        parser.add_argument("-o", "--offset", type=int, default=0,
+                help=_offset_help)
+
+        args = parser.parse_args()
+    else:
+        import optparse
+        parser = optparse.OptionParser()
+        parser.add_option("-u", "--user", type=str, help="Username")
+        parser.add_option("-p", "--password", type=str, help="Password")
+        parser.add_option("-d", "--device", type=str, default="/dev/sr0",
+                help="Device name (default is /dev/sr0)")
+        parser.add_option("-o", "--offset", type=int, default=0,
+                help=_offset_help)
+        (args, options) = parser.parse_args()
     if not args.user:
         exit("No username given")
 
