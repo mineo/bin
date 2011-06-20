@@ -80,6 +80,7 @@ def main():
             print str(i)+":", release.getArtist().getName(),
             print "-", release.getTitle(),
             print "(" + release.getTypes()[1].rpartition('#')[2] + ")"
+            print release.getId()
         num = -1
         while True:
             try:
@@ -103,7 +104,7 @@ def main():
 
     filename = "/tmp/cdrdao-%s.toc" % datetime.now()
     try:
-        proc = subprocess.Popen(["cdrdao", "read-toc", "--device",
+        proc = subprocess.Popen(["cdrdao", "read-toc", "--fast-toc", "--device",
                 args.device, "-v", "0", filename], stderr=subprocess.PIPE,
                 stdout=subprocess.PIPE)
         proc.wait()
