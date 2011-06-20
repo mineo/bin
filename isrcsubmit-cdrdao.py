@@ -23,6 +23,8 @@ Example:
 If you want to submit ISRCs for CD2, you'll have to specify an offset of 25"""
 
 def main():
+    print """ATTENTION: Please read the help (-h) if you want to submit ISRCs for a
+    release with multiple discs"""
     if version_info >= (2,7):
         import argparse
         parser = argparse.ArgumentParser()
