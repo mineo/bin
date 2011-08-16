@@ -147,8 +147,10 @@ def main():
 
         for key, val in tracks2isrcs.items():
             print "The ISRC %s will be attached to %s" % (val, key)
+            if raw_input("Is this correct? [y/N]").lower() != "y":
+                tracks2isrcs.pop(key)
 
-        if raw_input("Is this correct? [y/N] ") == "y":
+        if len(tracks2isrcs.keys() > 0):
             try:
                 q.submitISRCs(tracks2isrcs)
                 print "Successfully submitted", len(tracks2isrcs), "ISRCs."
