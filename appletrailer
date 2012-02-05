@@ -4,7 +4,7 @@
 DIR=~/Downloads
 url=$(zenity --entry --text="Enter the URL")
 if [ $? -eq 0 ]; then
-    url=$(echo $url | sed -r "s#(480|720|1080)p#h\1p#")
+    #url=$(echo $url | sed -r "s#(480|720|1080)p#h\1p#")
     filename=$(basename $url)
     wget -U Quicktime/7.6.2 -O $DIR/$filename $url
     if [ $? -eq 0 ]; then
