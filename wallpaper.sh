@@ -4,4 +4,5 @@ rm ~/.wallpaper/*.png
 for resolution in ${resolutions[@]}; do
     xplanetFX --geometry $resolution
     xplanetFX --render-single ~/.wallpaper/$resolution.png
+done
 feh --bg-scale ~/.wallpaper/*
