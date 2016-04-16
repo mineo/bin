@@ -12,6 +12,11 @@ popd
 
 PATH=$dir:$PATH
 
-make $@
+case $1 in
+    waf) shift
+        python2 waf configure
+        python2 waf;;
+    *)  make $@;;
+esac
 
 rm -rf $dir
